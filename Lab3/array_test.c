@@ -8,7 +8,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    n = 100;  // size of the 2D array
+    n = 10;  // size of the 2D array
     k = n / size;  // number of rows per process
 
     // Allocate local 2D array
