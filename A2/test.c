@@ -45,54 +45,85 @@ int main(int argc, char **argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank); /* Get my number                */
 
+	if (argc != 3)
+	{
+		printf("Usage: stencil input_file output_file\n");
+		return 1;
+	}
+
+	char *input = argv[1];
+	char *output = argv[2];
+	float *A, *B, *C, *A_chunk, *B_chunk;
 	int n;
-	int num_values;
-	float *input;
+
+	// int p = (int)sqrt(size);
+
+	// Read input file
 	if (rank == 0)
 	{
-		if (argc != 3)
-		{
-			printf("Usage: stencil input_file output_file\n");
-			return 1;
-		}
-		char *input_name = argv[1];
-		char *output_name = argv[2];
+		FILE *file;
+		int x;
+		file = fopen(input, "r");
+		x = fscanf(file, "%d", &n);
 
-		// Read input file
-		
-		
-		if (0 > (num_values = read_input(input_name, &input)))
+		printf("n: %d \n", n);
+
+		// Allocate memory for global matrices A and B
+
+		A = malloc(n * n * sizeof(float));
+		B = malloc(n * n * sizeof(float));
+		C = malloc(n * n * sizeof(float));
+
+		printf("scanning A \n");
+		for (int i = 0; i < (n); i++)
 		{
-			return 1;
+			x = fscanf(file, "%f", &A[i]);
+		}
+		printf("scanning B \n");
+		for (int i = 0; i < (n); i++)
+		{
+			x = fscanf(file, "%f", &B[i]);
 		}
 
-		
+		printf("A: \n");
+		for (int i = 0; i < (n); i++)
+		{
+			for (int j = 0; j < (n); j++)
+			{
+				printf("%f \t", A[i * n + j]);
+			}
+			printf("\n");
+		}
+		printf("\n");
+		printf("\n B: \n");
+		for (int i = 0; i < (n); i++)
+		{
+			for (int j = 0; j < (n); j++)
+			{
+				printf("%f \t", B[i * n + j]);
+			}
+			printf("\n");
+		}
+		printf("\n");
 	}
 
-	MPI_Bcast(&num_values, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	n = num_values;
-	float B_chunk[n * (n / size)];
-	float A[n * n], B[n * n], C[n * n];
-	if (rank == 0)
-	{
+	MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-		for (int i = 0; i < n * n; ++i)
-		{
-			A[i] = input[i + 1];
-			B[i] = input[i + 1 + n * n];
-		}
+	int num_rows = n / size;
 
-		
-	}
+	// Allocate memory for local matrices A_chunk and B_chunk
+	A_chunk = malloc(n * num_rows * sizeof(float));
+	B_chunk = malloc(n * num_rows * sizeof(float));
+
 	// Define the datatype for a column
-		MPI_Datatype column_type;
-		MPI_Type_vector(
-			n,		   // count
-			1,		   // blocklength
-			n,		   // stride
-			MPI_FLOAT, // oldtype
-			&column_type);
-		MPI_Type_commit(&column_type);
+	MPI_Datatype column_type;
+	MPI_Type_vector(
+		n,		   // count
+		1,		   // blocklength
+		n,		   // stride
+		MPI_FLOAT, // oldtype
+		&column_type);
+	MPI_Type_commit(&column_type);
 
 	// Send columns of b
 	MPI_Scatter(B, n / size, column_type, B_chunk, n * (n / size), MPI_FLOAT, 0, MPI_COMM_WORLD);
@@ -110,59 +141,46 @@ int main(int argc, char **argv)
 	}
 	*/
 
-	int num_rows = n / size;
-	
 	for (int i = 0; i < n; ++i)
 	{
 		for (int j = 0; j < num_rows; ++j)
 		{
-			float A_chunk[n * num_rows];
+
 			if (rank == 0)
 			{
 				A_chunk[j * n + i] = A[i * n + j];
 			}
-			// broadcast rows of A
-			//MPI_Bcast syntax: MPI_Bcast(void* data, int count, MPI_Datatype datatype, int root, MPI_Comm communicator)
-			MPI_Bcast(A_chunk, n * num_rows, MPI_FLOAT, 0, MPI_COMM_WORLD);
+		}
 
-			// print A_chunk and B_chunk
-			printf("A_chunk rank %d: ", rank);
-			for (int j = 0; j < num_rows; ++j){
-				for (int k = 0; k < n; ++k)
-				{
-					printf("%f ", A_chunk[j * n + k]);
-				}
-				printf("\n");
+		// broadcast rows of A
+		// MPI_Bcast syntax: MPI_Bcast(void* data, int count, MPI_Datatype datatype, int root, MPI_Comm communicator)
+		MPI_Bcast(A_chunk, n * num_rows, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+		// print A_chunk and B_chunk
+		printf("A_chunk rank %d: ", rank);
+		for (int j = 0; j < num_rows; ++j)
+		{
+			for (int k = 0; k < n; ++k)
+			{
+				printf("%f ", A_chunk[j * n + k]);
 			}
-			printf("B_chunk rank %d: ", rank);
-			for (int j = 0; j < n; ++j){
-				for (int k = 0; k < n; ++k)
-				{
-					printf("%f ", B_chunk[j * n + k]);
-				}
-				printf("\n");
+			printf("\n");
+		}
+		printf("B_chunk rank %d: ", rank);
+		for (int j = 0; j < n; ++j)
+		{
+			for (int k = 0; k < n; ++k)
+			{
+				printf("%f ", B_chunk[j * n + k]);
 			}
-
-			// do matrix multiplication
-
-
-			
-			
+			printf("\n");
 		}
 
 		// do matrix multiplication
-
-		// gather results
 	}
 
-	// MPI_Bcast(A_own, n*rows,
-	// MPI_Scatter(A, n*(n/size), MPI_FLOAT, A_own, n*(n/size), MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-	// Do matrix multiplication
-	// for
-
-
-	//free(B);
+	// free(B);
+	// end mpi
+	MPI_Finalize();
 	return 0;
 }
-
