@@ -5,6 +5,17 @@
 #include <string.h>
 #define PRODUCE_OUTPUT_FILE
 
+// Run with: mpirun -np 4 ./matmul input_file output_file
+// number of processes must be a perfect square
+
+/* TODO: 
+Swap A and B to get correct output
+Improve matrix multiplication inner loop
+Remove mallocs and frees?
+
+*/
+
+
 int write_output(char *file_name, const float *output, int n, int size)
 {
     // Function that writes the output in an output file
