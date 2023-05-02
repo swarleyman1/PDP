@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <mpi.h>
 #include <time.h>
+#include <math.h>
 
 // Parallel quicksort using MPI (unfinished)
 
@@ -31,7 +32,7 @@ group consists of one single process.
 */
 
 // Read the input file and return the number of elements (from A1)
-int read_input(const char *file_name, double **values)
+int read_input(const char *file_name, int **values)
 {
     FILE *file;
     if (NULL == (file = fopen(file_name, "r")))
@@ -45,14 +46,14 @@ int read_input(const char *file_name, double **values)
         perror("Couldn't read element count from input file");
         return -1;
     }
-    if (NULL == (*values = malloc(num_values * sizeof(double))))
+    if (NULL == (*values = malloc(num_values * sizeof(int))))
     {
         perror("Couldn't allocate memory for input");
         return -1;
     }
     for (int i = 0; i < num_values; i++)
     {
-        if (EOF == fscanf(file, "%lf", &((*values)[i])))
+        if (EOF == fscanf(file, "%d", &((*values)[i])))
         {
             perror("Couldn't read elements from input file");
             return -1;
@@ -66,7 +67,7 @@ int read_input(const char *file_name, double **values)
 }
 
 // Write the output file (from A1)
-int write_output(char *file_name, const double *output, int num_values)
+int write_output(char *file_name, const int *output, int num_values)
 {
     FILE *file;
     if (NULL == (file = fopen(file_name, "w")))
@@ -76,7 +77,7 @@ int write_output(char *file_name, const double *output, int num_values)
     }
     for (int i = 0; i < num_values; i++)
     {
-        if (0 > fprintf(file, "%.4f ", output[i]))
+        if (0 > fprintf(file, "%.4d ", output[i]))
         {
             perror("Couldn't write to output file");
         }
@@ -95,13 +96,13 @@ int write_output(char *file_name, const double *output, int num_values)
 // Compare function for qsort
 int compare(const void *a, const void *b)
 {
-    return (*(double *)a - *(double *)b);
+    return (*(int *)a - *(int *)b);
 }
 
 // Swap function
-void swap(double *a, double *b)
+void swap(int *a, int *b)
 {
-    double temp = *a;
+    int temp = *a;
     *a = *b;
     *b = temp;
 }
@@ -122,76 +123,84 @@ double pivot_selection(int *data, int length, int pivot_method, MPI_Comm comm)
         {
             if (length % 2 == 0)
             {
-                pivot = (local_list[length / 2] + local_list[length / 2 - 1]) / 2;
+                pivot = (data[length / 2] + data[length / 2 - 1]) / 2;
             }
             else
             {
-                pivot = local_list[length / 2];
-            }
-
-            MPI_Bcast(&pivot, 1, MPI_DOUBLE, rank, comm);
+                pivot = data[length / 2];
+            }  
         }
+
+        MPI_Bcast(&pivot, 1, MPI_DOUBLE, 0, comm);
+        
         break;
 
     case 2:
         // Select the median of all medians in each processor group
-        double median, medians[size];
+        double median1;
+        double *medians1 = malloc(size * sizeof(double));
 
         if (length % 2 == 0)
         {
-            median = (local_list[length / 2] + local_list[length / 2 - 1]) / 2;
+            median1 = (data[length / 2] + data[length / 2 - 1]) / 2;
         }
         else
         {
-            median = local_list[length / 2];
+            median1 = data[length / 2];
         }
 
         // MPI_Allgather(&median, 1, MPI_DOUBLE, medians, 1, MPI_DOUBLE, comm);
-        MPI_Gather(&median, 1, MPI_DOUBLE, medians, 1, MPI_DOUBLE, 0, comm);
+        MPI_Gather(&median1, 1, MPI_DOUBLE, medians1, 1, MPI_DOUBLE, 0, comm);
 
         if (rank == 0)
         {
-            qsort(medians, size, sizeof(double), compare);
+            qsort(medians1, size, sizeof(double), compare); // are we allowed to use qsort?
             if (size % 2 == 0) // Will always be even since size is a power of 2
             {
-                pivot = (medians[size / 2] + medians[size / 2 - 1]) / 2;
+                pivot = (medians1[size / 2] + medians1[size / 2 - 1]) / 2;
             }
             else
             {
-                pivot = medians[size / 2];
-            }
-
-            MPI_Bcast(&pivot, 1, MPI_DOUBLE, rank, comm);
+                pivot = medians1[size / 2];
+            }            
         }
+
+        MPI_Bcast(&pivot, 1, MPI_DOUBLE, rank, comm);
+        free(medians1);
+
         break;
 
     case 3:
         // Select the mean value of all medians in each processor group
-        double median, medians[size];
+        double median2;
+        double *medians2 = malloc(size * sizeof(double));
 
         if (length % 2 == 0)
         {
-            median = (local_list[length / 2] + local_list[length / 2 - 1]) / 2;
+            median2 = (data[length / 2] + data[length / 2 - 1]) / 2;
         }
         else
         {
-            median = local_list[length / 2];
+            median2 = data[length / 2];
         }
 
         // MPI_Allgather(&median, 1, MPI_DOUBLE, medians, 1, MPI_DOUBLE, comm);
-        MPI_Gather(&median, 1, MPI_DOUBLE, medians, 1, MPI_DOUBLE, 0, comm);
+        MPI_Gather(&median2, 1, MPI_DOUBLE, medians2, 1, MPI_DOUBLE, 0, comm);
 
         if (rank == 0)
         {
             double temp = 0;
             for (int i = 0; i < size; i++)
             {
-                temp += medians[i];
+                temp += medians2[i];
             }
             pivot = temp / size;
-
-            MPI_Bcast(&pivot, 1, MPI_DOUBLE, rank, comm);
         }
+
+        MPI_Bcast(&pivot, 1, MPI_DOUBLE, rank, comm);
+
+        free(medians2);
+
         break;
 
     default:
@@ -213,12 +222,13 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
     // Base case
     if (size == 1 || depth == 0)
     {
-        // TODO
         return;
     }
 
     // Select pivot
     pivot = pivot_selection(data, length, pivot_method, comm);
+
+    printf("rank: %d, pivot: %f\n", rank, pivot);
 
     // Partition data
     int i = 0, j = length - 1;
@@ -238,11 +248,63 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
         }
     }
 
+    for(int k = 0; k < length; k++){
+        printf("rank: %d, data[%d]: %d\n", rank, k, data[k]);
+    }
+
     // Swap data between processors
     // (left half of processors send data larger than pivot
     // to right half of processors and vice versa)
+    int send_count, recv_count;
+    if (rank<size/2){
+        send_count = length - i;
+    } else {
+        send_count = i;
+    }
 
-    // ------ TODO ------
+    printf("rank: %d, send_count: %d\n", rank, send_count);
+
+    // find partner rank
+    int partner_rank;
+    if (rank < size/2) {
+        partner_rank = rank + size / 2;
+    } else {
+        partner_rank = rank - size / 2;
+    }
+
+    printf("rank: %d, partner_rank: %d\n", rank, partner_rank);
+
+
+    // send and receive data
+    MPI_Sendrecv(&data[i], send_count, MPI_INT, partner_rank, 0, &data[0], length, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
+   
+    for (int k =0; k < size/2; k++) {
+        if (rank < size/2) {
+            MPI_Send(&data[i], send_count, MPI_INT, rank + size / 2, 0, comm);
+            MPI_Recv(&data[i], recv_count, MPI_INT, rank - size / 2, 0, comm, MPI_STATUS_IGNORE);
+        } else {
+            MPI_Recv(&data[i], recv_count, MPI_INT, rank - size / 2, 0, comm, MPI_STATUS_IGNORE); // TODO: check if this is correct
+            MPI_Send(&data[i+recv_count], send_count, MPI_INT, rank + size / 2, 0, comm);
+        }
+    }
+
+    // Merge data in each processor
+    // (each processor should have a sorted list of data)
+
+    // TODO: check if this is correct
+    length = length - send_count + recv_count;
+    i = 0, j = length - 1;
+    while(i<j) {
+        while (data[i] < data[j]) {
+            i++;
+        }
+        while (data[j] > data[i]) {
+            j--;
+        }
+        if (i < j) {
+            swap(&data[i], &data[j]);
+        }
+    }
 
     // Split communicator into two groups
     int color = (rank < size / 2) ? 0 : 1;
@@ -265,10 +327,16 @@ void Quicksort(int *data, int length, int pivot_method, int max_depth)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int chunk_size = length / size;
-    double *local_list = malloc(chunk_size * sizeof(double));
-    MPI_Scatter(data, length, MPI_INT, local_list, chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
+    int *local_list = malloc(length * sizeof(int));  // TODO: check if length is correct
+    if (rank == 0)
+    printf("%d\n", data[0]);
+    printf("rank %d, chunk_size %d\n", rank, chunk_size);
 
-    qsort(local_list, chunk_size, sizeof(double), compare);
+    MPI_Scatter(data, chunk_size, MPI_INT, local_list, chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
+
+    printf("rank %d, local_list[0] %d\n", rank, local_list[0]);
+
+    qsort(local_list, chunk_size, sizeof(int), compare);
 
     QuicksortInner(local_list, chunk_size, MPI_COMM_WORLD, pivot_method, max_depth);
 
@@ -299,7 +367,7 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int num_values;
-    double *input;
+    int *input;
     // double *output; // Not used
     //  Read input file
     if (rank == 0)
