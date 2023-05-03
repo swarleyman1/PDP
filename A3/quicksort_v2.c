@@ -3,6 +3,7 @@
 #include <mpi.h>
 #include <time.h>
 #include <math.h>
+#include <string.h>
 
 // Parallel quicksort using MPI (unfinished)
 
@@ -128,11 +129,11 @@ double pivot_selection(int *data, int length, int pivot_method, MPI_Comm comm)
             else
             {
                 pivot = data[length / 2];
-            }  
+            }
         }
 
         MPI_Bcast(&pivot, 1, MPI_DOUBLE, 0, comm);
-        
+
         break;
 
     case 2:
@@ -155,14 +156,14 @@ double pivot_selection(int *data, int length, int pivot_method, MPI_Comm comm)
         if (rank == 0)
         {
             qsort(medians1, size, sizeof(double), compare); // are we allowed to use qsort?
-            if (size % 2 == 0) // Will always be even since size is a power of 2
+            if (size % 2 == 0)                              // Will always be even since size is a power of 2
             {
                 pivot = (medians1[size / 2] + medians1[size / 2 - 1]) / 2;
             }
             else
             {
                 pivot = medians1[size / 2];
-            }            
+            }
         }
 
         MPI_Bcast(&pivot, 1, MPI_DOUBLE, rank, comm);
@@ -248,7 +249,8 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
         }
     }
 
-    for(int k = 0; k < length; k++){
+    for (int k = 0; k < length; k++)
+    {
         printf("rank: %d, data[%d]: %d\n", rank, k, data[k]);
     }
 
@@ -256,9 +258,12 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
     // (left half of processors send data larger than pivot
     // to right half of processors and vice versa)
     int send_count, recv_count;
-    if (rank<size/2){
+    if (rank < size / 2)
+    {
         send_count = length - i;
-    } else {
+    }
+    else
+    {
         send_count = i;
     }
 
@@ -266,27 +271,91 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
 
     // find partner rank
     int partner_rank;
-    if (rank < size/2) {
+    if (rank < size / 2)
+    {
         partner_rank = rank + size / 2;
-    } else {
+    }
+    else
+    {
         partner_rank = rank - size / 2;
     }
 
     printf("rank: %d, partner_rank: %d\n", rank, partner_rank);
 
-
     // send and receive data
-    MPI_Sendrecv(&data[i], send_count, MPI_INT, partner_rank, 0, &data[0], length, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
-   
-    for (int k =0; k < size/2; k++) {
-        if (rank < size/2) {
-            MPI_Send(&data[i], send_count, MPI_INT, rank + size / 2, 0, comm);
-            MPI_Recv(&data[i], recv_count, MPI_INT, rank - size / 2, 0, comm, MPI_STATUS_IGNORE);
-        } else {
-            MPI_Recv(&data[i], recv_count, MPI_INT, rank - size / 2, 0, comm, MPI_STATUS_IGNORE); // TODO: check if this is correct
-            MPI_Send(&data[i+recv_count], send_count, MPI_INT, rank + size / 2, 0, comm);
+    MPI_Sendrecv(&send_count, 1, MPI_INT, partner_rank, 0, &recv_count, 1, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
+
+    printf("rank: %d, recv_count: %d\n", rank, recv_count);
+
+    // Create send, receive and temp buffers
+    int *send_buffer = malloc(send_count * sizeof(int));
+    int *recv_buffer = malloc(recv_count * sizeof(int));
+    int *temp_buffer = malloc(length * sizeof(int));
+
+    // Copy data to send buffer
+    if (rank < size / 2)
+    {
+        memcpy(send_buffer, &data[i], send_count * sizeof(int)); // Send data larger than pivot
+    }
+    else
+    {
+        memcpy(send_buffer, &data[0], send_count * sizeof(int)); // Send data smaller than pivot
+    }
+
+    for (int k = 0; k < size / 2; k++)
+    {
+        if (rank < size / 2)
+        {
+            MPI_Send(&send_buffer, send_count, MPI_INT, partner_rank, 0, comm);
+            MPI_Recv(&recv_buffer, recv_count, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
+        }
+        else
+        {
+            MPI_Recv(&recv_buffer, recv_count, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE); // TODO: check if this is correct
+            MPI_Send(&send_buffer, send_count, MPI_INT, partner_rank, 0, comm);
         }
     }
+
+    // printf("After send and receive\n");
+    printf("Rank: %d i: %d\n", rank, i);
+    // Place remaining data in temp buffer
+    if (rank < size / 2)
+    {
+        memcpy(temp_buffer, &data[0], i * sizeof(int));
+    }
+    else
+    {
+        memcpy(temp_buffer, &data[i], (length - i) * sizeof(int));
+    }
+
+    // Clear data
+    memset(data, 0, length * sizeof(int));
+
+    for (int k = 0; k < recv_count; k++)
+    {
+        printf("Rank: %d recv_buffer[%d]: %d\n", rank, k, recv_buffer[k]);
+    }
+
+    // printf("Rank: %d After clear data\n", rank);
+
+    // Rebuild data
+    if (rank < size / 2)
+    {
+        memcpy(data, temp_buffer, i * sizeof(int));
+        memcpy(&data[i], recv_buffer, recv_count * sizeof(int));
+    }
+    else
+    {
+        memcpy(data, temp_buffer, (length - i) * sizeof(int));
+        memcpy(&data[length - i], recv_buffer, recv_count * sizeof(int));
+    }
+
+    printf("Rank: %d After rebuild data\n", rank);
+
+    // Free buffers
+    free(send_buffer);
+    free(recv_buffer);
+    free(temp_buffer);
 
     // Merge data in each processor
     // (each processor should have a sorted list of data)
@@ -294,14 +363,18 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
     // TODO: check if this is correct
     length = length - send_count + recv_count;
     i = 0, j = length - 1;
-    while(i<j) {
-        while (data[i] < data[j]) {
+    while (i < j)
+    {
+        while (data[i] < data[j])
+        {
             i++;
         }
-        while (data[j] > data[i]) {
+        while (data[j] > data[i])
+        {
             j--;
         }
-        if (i < j) {
+        if (i < j)
+        {
             swap(&data[i], &data[j]);
         }
     }
@@ -327,9 +400,9 @@ void Quicksort(int *data, int length, int pivot_method, int max_depth)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int chunk_size = length / size;
-    int *local_list = malloc(length * sizeof(int));  // TODO: check if length is correct
+    int *local_list = malloc(length * sizeof(int)); // TODO: check if length is correct
     if (rank == 0)
-    printf("%d\n", data[0]);
+        printf("%d\n", data[0]);
     printf("rank %d, chunk_size %d\n", rank, chunk_size);
 
     MPI_Scatter(data, chunk_size, MPI_INT, local_list, chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
