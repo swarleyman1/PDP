@@ -229,7 +229,7 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
     // Select pivot
     pivot = pivot_selection(data, length, pivot_method, comm);
 
-    printf("rank: %d, pivot: %f\n", rank, pivot);
+    //printf("rank: %d, pivot: %f\n", rank, pivot);
 
     // Partition data
     int i = 0, j = length - 1;
@@ -267,7 +267,7 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
         send_count = i;
     }
 
-    printf("rank: %d, send_count: %d\n", rank, send_count);
+    //printf("rank: %d, send_count: %d\n", rank, send_count);
 
     // find partner rank
     int partner_rank;
@@ -302,22 +302,27 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
         memcpy(send_buffer, &data[0], send_count * sizeof(int)); // Send data smaller than pivot
     }
 
-    for (int k = 0; k < size / 2; k++)
+    for (int k = 0; k < send_count; k++)
     {
-        if (rank < size / 2)
-        {
-            MPI_Send(&send_buffer, send_count, MPI_INT, partner_rank, 0, comm);
-            MPI_Recv(&recv_buffer, recv_count, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
-        }
-        else
-        {
-            MPI_Recv(&recv_buffer, recv_count, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE); // TODO: check if this is correct
-            MPI_Send(&send_buffer, send_count, MPI_INT, partner_rank, 0, comm);
-        }
+        printf("Rank: %d send_buffer[%d]: %d\n", rank, k, send_buffer[k]);
     }
 
-    // printf("After send and receive\n");
-    printf("Rank: %d i: %d\n", rank, i);
+    if (rank < size / 2)
+    {
+        MPI_Send(send_buffer, send_count, MPI_INT, partner_rank, 0, comm);
+        MPI_Recv(recv_buffer, recv_count, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
+    }
+    else
+    {
+        MPI_Recv(recv_buffer, recv_count, MPI_INT, partner_rank, 0, comm, MPI_STATUS_IGNORE);
+        MPI_Send(send_buffer, send_count, MPI_INT, partner_rank, 0, comm);
+    }
+
+    //printf("After send and receive recv_count is %d for rank %d\n", recv_count, rank);
+    //printf("Rank: %d i: %d\n", rank, i);
+
+    //printf("addr of recv_buffer: %p for rank %d\n", recv_buffer, rank);
+
     // Place remaining data in temp buffer
     if (rank < size / 2)
     {
@@ -360,7 +365,6 @@ void QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int 
     // Merge data in each processor
     // (each processor should have a sorted list of data)
 
-    // TODO: check if this is correct
     length = length - send_count + recv_count;
     i = 0, j = length - 1;
     while (i < j)
@@ -413,7 +417,7 @@ void Quicksort(int *data, int length, int pivot_method, int max_depth)
 
     QuicksortInner(local_list, chunk_size, MPI_COMM_WORLD, pivot_method, max_depth);
 
-    MPI_Gather(local_list, chunk_size, MPI_INT, data, length, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(local_list, chunk_size, MPI_INT, data, length, MPI_INT, 0, MPI_COMM_WORLD); // Chunk size is wrong to use here
 
     free(local_list);
 
