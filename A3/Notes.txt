@@ -1,0 +1,18 @@
+Available data for quicksort:
+backwards4.txt
+backwards10.txt          
+backwards93.txt 
+backwards125000000.txt   
+backwards2000000000.txt  
+
+input125000000.txt   
+input250000000.txt  
+input500000000.txt
+input1000000000.txt  
+input2000000000.txt  
+ 
+input3.txt          
+input4.txt          
+input10.txt      
+input93.txt
+output10.txt
