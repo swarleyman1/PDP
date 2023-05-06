@@ -3,7 +3,7 @@
 #SBATCH -M snowy
 #SBATCH -A uppmax2023-2-13
 #SBATCH -p core -n 16
-#SBATCH -t 20:00
+#SBATCH -t 60:00
 #SBATCH -J quicksort
 
 ################################################################################
@@ -19,13 +19,23 @@
 # Author: Jacob Malmenstedt 2023
 ################################################################################
 
-num_proc=(1 2 4 8 16)
-pivot_method=(1 2 3)
+num_proc=(
+    1 
+    2 
+    4 
+    8 
+    16
+)
+pivot_method=(  
+    1 
+    2 
+    3
+)
 data_dir=/proj/uppmax2023-2-13/nobackup/qsort_indata
 output_file="output_to_remove.txt"
 commands=(
 	"./quicksort ${data_dir}/input125000000.txt ${output_file}"
-	"./quicksort ${data_dir}/input250000000.txt ${output_file}"
+	# "./quicksort ${data_dir}/input250000000.txt ${output_file}"
 	# "./quicksort ${data_dir}/input500000000.txt ${output_file}"
 	# "./quicksort ${data_dir}/input1000000000.txt  ${output_file}"
     # "./quicksort ${data_dir}/input2000000000.txt  ${output_file}"
