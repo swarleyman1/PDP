@@ -17,6 +17,7 @@ input10.txt
 input93.txt
 output10.txt
 
+Timings 125000000.txt
 Checking strong scalability with pivot method 1
 Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 1 processes
 26.817547
@@ -28,6 +29,7 @@ Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.t
 9.504813
 Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 16 processes
 25.224264
+
 Checking strong scalability with pivot method 2
 Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 1 processes
 26.569436
@@ -38,3 +40,19 @@ Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.t
 Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 8 processes
 21.878073
 Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 16 processes
+###########
+
+Checking strong scalability with pivot method 3
+Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 1 processes
+26.638258
+Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 2 processes
+22.510791
+Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 4 processes
+20.945385
+Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input125000000.txt output_to_remove.txt with 8 processes
+21.755341
+
+
+Timings 250000000.txt
+Checking strong scalability with pivot method 1
+Running ./quicksort /proj/uppmax2023-2-13/nobackup/qsort_indata/input250000000.txt output_to_remove.txt with 8 processes
