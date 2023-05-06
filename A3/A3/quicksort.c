@@ -282,7 +282,7 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
         {
             i++;
         }
-        while (data[j] >= pivot && j > 0)
+        while (data[j] > pivot && j > 0)
         {
             j--;
         }
@@ -390,7 +390,9 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
     // Merge data in each processor
     // (actually uses insertion sort to sort data instead of merging.
     // Should be fast enough since data is already partially sorted)
-    insertion_sort(data, length);
+    //insertion_sort(data, length);
+
+    qsort(data, length, sizeof(int), compare);
 
     // Split communicator into two groups
     int color = (rank < size / 2) ? 0 : 1;
@@ -412,8 +414,9 @@ void Quicksort(int *data, int length, int pivot_method, int max_depth)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    // Special case where length < size
-    // (for all reasonable values of size this is faster than quicksort anyway)
+    // Special case where length < size and Scatterv will fail
+    // (for all reasonable values of size and length, this should never happen
+    // but in case it does insertion sort will be faster than quicksort)
     if (length < size)
     {
         if (rank == 0)
