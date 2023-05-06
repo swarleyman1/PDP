@@ -267,12 +267,8 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
         return length;
     }
 
-    printf("Rank %d length: %d\n", rank, length);
-
     // Select pivot
     pivot = pivot_selection(data, length, pivot_method, comm);
-
-    printf("Rank %d pivot: %f\n", rank, pivot);
 
     // Partition data around pivot
     int i = 0, j = length - 1;
