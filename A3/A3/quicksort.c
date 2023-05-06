@@ -278,7 +278,7 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
         {
             i++;
         }
-        while (data[j] > pivot && j > 0)
+        while (data[j] >= pivot && j > 0)
         {
             j--;
         }
