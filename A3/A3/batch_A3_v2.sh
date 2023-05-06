@@ -3,7 +3,7 @@
 #SBATCH -M snowy
 #SBATCH -A uppmax2023-2-13
 #SBATCH -p core -n 16
-#SBATCH -t 60:00
+#SBATCH -t 1:00:00
 #SBATCH -J quicksort_v2
 
 ################################################################################
@@ -19,35 +19,22 @@
 # Author: Jacob Malmenstedt 2023
 ################################################################################
 
-num_proc=(
-    1 
-    2 
-    4 
-    8 
-    16
-)
-pivot_method=(  
-    1 
-    2 
-    3
-)
+num_proc=(1 2 4 8 16)
+
 data_dir=/proj/uppmax2023-2-13/nobackup/qsort_indata
 output_file="output_to_remove.txt"
 commands=(
-	# "./quicksort_v2 ${data_dir}/input125000000.txt ${output_file}"
-	"./quicksort_v2 ${data_dir}/input250000000.txt ${output_file}"
-	# "./quicksort_v2 ${data_dir}/input500000000.txt ${output_file}"
-	# "./quicksort_v2 ${data_dir}/input1000000000.txt  ${output_file}"
-    # "./quicksort_v2 ${data_dir}/input2000000000.txt  ${output_file}"
+	# "./quicksort_v2 ${data_dir}/input125000000.txt ${output_file} 1"
+	"./quicksort_v2 ${data_dir}/input250000000.txt ${output_file} 1"
+	# "./quicksort_v2 ${data_dir}/input500000000.txt ${output_file} 1"
+	# "./quicksort_v2 ${data_dir}/input1000000000.txt  ${output_file} 1"
+    # "./quicksort_v2 ${data_dir}/input2000000000.txt  ${output_file} 1"
 )
 
-for pivot in ${pivot_method[@]}; do
-    echo "Checking strong scalability with pivot method $pivot"
-    for p in ${num_proc[@]}; do
-        for (( i = 0; i < ${#commands[@]}; i++ )); do
-            echo "Running ${commands[$i]} with $p processes"
-            mpirun --bind-to none -np $p ${commands[$i]} $pivot
-        done
+for p in ${num_proc[@]}; do
+    for (( i = 0; i < ${#commands[@]}; i++ )); do
+        echo "Running ${commands[$i]} with $p processes"
+        mpirun --bind-to none -np $p ${commands[$i]}
     done
 done
 echo "OK"
