@@ -92,10 +92,10 @@ int write_output(char *file_name, const int *output, int num_values)
             perror("Couldn't write to output file");
         }
     }
-    if (0 > fprintf(file, "\n"))
-    {
-        perror("Couldn't write to output file");
-    }
+    //if (0 > fprintf(file, "\n"))
+    //{
+    //    perror("Couldn't write to output file");
+    //}
     if (0 != fclose(file))
     {
         perror("Warning: couldn't close output file");
@@ -150,6 +150,47 @@ void insertion_sort_double(double *arr, double n)
     }
 }
 
+// Merge two sorted arrays
+void merge(int *arr1, int *arr2, int n1, int n2, int *arr3)
+{
+    int i = 0, j = 0, k = 0;
+    // Traverse both array
+    while (i < n1 && j < n2)
+    {
+        // Check if current element of first
+        // array is smaller than current element
+        // of second array. 
+        if (arr1[i] < arr2[j]) // if yes, store first array element and increment first array index
+        {
+            arr3[k] = arr1[i];
+            k++;
+            i++;
+        }
+        else
+        {
+            arr3[k] = arr2[j]; // else store second array element and increment second array index
+            k++;
+            j++;
+        }
+    }
+
+    // Store remaining elements of first array
+    while (i < n1)
+    {
+        arr3[k] = arr1[i];
+        k++;
+        i++;
+    }
+
+    // Store remaining elements of second array
+    while (j < n2)
+    {
+        arr3[k] = arr2[j];
+        k++;
+        j++;
+    }
+}
+
 // Select pivot element
 double pivot_selection(int *data, int length, int pivot_method, MPI_Comm comm)
 {
@@ -192,7 +233,6 @@ double pivot_selection(int *data, int length, int pivot_method, MPI_Comm comm)
             median1 = data[length / 2];
         }
 
-        // MPI_Allgather(&median, 1, MPI_DOUBLE, medians, 1, MPI_DOUBLE, comm);
         MPI_Gather(&median1, 1, MPI_DOUBLE, medians1, 1, MPI_DOUBLE, 0, comm);
 
         if (rank == 0)
@@ -271,7 +311,8 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
     pivot = pivot_selection(data, length, pivot_method, comm);
 
     // Partition data around pivot
-    int i = 0, j = length - 1;
+    int i = 0;
+    int j = length - 1;
     while (i < j)
     {
         while (data[i] < pivot && i < length)
@@ -363,16 +404,14 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
     // Clear data
     memset(data, 0, length * sizeof(int));
 
-    // Rebuild data from temp buffer and received buffer
+    // Merge data from temp buffer and recv buffer
     if (rank < size / 2)
     {
-        memcpy(data, temp_buffer, i * sizeof(int));
-        memcpy(&data[i], recv_buffer, recv_count * sizeof(int));
+        merge(temp_buffer, recv_buffer, i, recv_count, data);
     }
     else
     {
-        memcpy(data, temp_buffer, (length - i) * sizeof(int));
-        memcpy(&data[length - i], recv_buffer, recv_count * sizeof(int));
+        merge(temp_buffer, recv_buffer, length - i, recv_count, data);
     }
 
     // Free buffers
@@ -382,13 +421,6 @@ int QuicksortInner(int *data, int length, MPI_Comm comm, int pivot_method, int d
 
     // Update length
     length = length - send_count + recv_count;
-
-    // Merge data in each processor
-    // (actually uses insertion sort to sort data instead of merging.
-    // Should be fast enough since data is already partially sorted)
-    //insertion_sort(data, length);
-
-    qsort(data, length, sizeof(int), compare);
 
     // Split communicator into two groups
     int color = (rank < size / 2) ? 0 : 1;

@@ -11,7 +11,7 @@
 # Note that the following commands need to be run before this script:
 #   module load gcc openmpi
 #   make clean
-#   make quicksort_v2
+#   make quicksort
 
 # Runs the program with different input on different number of processes to check
 # strong scalability. (Weak scalability can be checked from the output of the
@@ -24,11 +24,11 @@ num_proc=(1 2 4 8 16)
 data_dir=/proj/uppmax2023-2-13/nobackup/qsort_indata
 output_file="output_to_remove.txt"
 commands=(
-	# "./quicksort_v2 ${data_dir}/input125000000.txt ${output_file} 1"
-	"./quicksort_v2 ${data_dir}/input250000000.txt ${output_file} 1"
-	# "./quicksort_v2 ${data_dir}/input500000000.txt ${output_file} 1"
-	# "./quicksort_v2 ${data_dir}/input1000000000.txt  ${output_file} 1"
-    # "./quicksort_v2 ${data_dir}/input2000000000.txt  ${output_file} 1"
+	# "./quicksort ${data_dir}/input125000000.txt ${output_file} 1"
+	"./quicksort ${data_dir}/input250000000.txt ${output_file} 1"
+	# "./quicksort ${data_dir}/input500000000.txt ${output_file} 1"
+	# "./quicksort ${data_dir}/input1000000000.txt  ${output_file} 1"
+    # "./quicksort ${data_dir}/input2000000000.txt  ${output_file} 1"
 )
 
 for p in ${num_proc[@]}; do
