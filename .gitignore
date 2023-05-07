@@ -61,3 +61,8 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Unignore README and Makefiles
+!README
+!Makefile
+!makefile
