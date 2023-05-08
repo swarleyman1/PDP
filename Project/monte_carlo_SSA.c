@@ -16,9 +16,19 @@
  *                                                                          *
  ****************************************************************************/
 
-#define R 15  // Number of reactions
-#define Q 7   // Number of quantities
-#define T 100 // Maximum time
+// Upgrades to be implemented:
+/*
+All processes work fully in parallel, however, as the time steps are chosen randomly, the processes
+proceed to reach the final time asynchronously. 
+Record the wall clock time after passing time 25,50,75,100 (per process)
+so that at the end you can output the average time per processor for
+each time sub-interval. You are encouraged to use the MPI one-sided put/get functionality.*/
+
+// Constants
+#define OUTPUT 0    // Flag for output to file or not
+#define R 15        // Number of reactions
+#define Q 7         // Number of quantities
+#define T 100       // Maximum time
 
 // Function declarations
 void prop(int *x, double *w);
@@ -38,7 +48,7 @@ int main(int argc, char *argv[])
     }
 
     // Read command line arguments
-    int n = atoi(argv[1]);    // Number of iterations per process
+    int N = atoi(argv[1]);    // Number of iterations
     char *filename = argv[2]; // Output file name
 
     // Initialize MPI
@@ -50,7 +60,7 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Rank of current process
 
     // Initialize
-    const int N = size * n;                            // Total number of iterations
+    const int n = N / size;                            // Number of iterations per process
     const int x0[] = {900, 900, 30, 330, 50, 270, 20}; // Initial state vector
     int *local_X = (int *)malloc(n * sizeof(int));     // Local output vector
 
@@ -123,10 +133,11 @@ int main(int argc, char *argv[])
     MPI_Reduce(&time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     if (rank == 0)
     {
-        printf("Max time: %fs\n", max_time);
+        printf("%f\n", max_time);
     }
 
     // Write to file
+    #if OUTPUT
     if (rank == 0)
     {
         FILE *fp;
@@ -144,6 +155,7 @@ int main(int argc, char *argv[])
         fprintf(fp, "%d - %d \t %d\n", bins[19], global_max, global_bin_counts[19]);
         fclose(fp);
     }
+    #endif
 
     // Free memory
     free(local_X);
