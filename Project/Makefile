@@ -1,7 +1,7 @@
 ### Makefile for project ###
 
 CC = mpicc
-CCFLAGS = -g -O3
+CCFLAGS = -g -O3 -Ofast -Wall
 LIBS = -lm
 
 # List of all source files
