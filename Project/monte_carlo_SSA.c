@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <openmpi.h>
+#include <mpi.h>
 #include <math.h>
 #include <time.h>
+#include <limits.h>
+#include "prop.h"
+#include "update_state.h"
 
 /****************************************************************************
  * Code for the project in the course PDP at Uppsala University 2023        *
@@ -18,9 +21,9 @@
 
 // Function declarations
 double randdouble(double min, double max);
-void update_state(int *x, int reaction);
+// void update_state(int *x, int reaction);
 void prop(int *x, double *w);
-int select_reaction(double *q, double a0);
+int select_reaction(double *q, double a0, int length);
 int gillespieSSA();
 
 // Main function
@@ -46,10 +49,10 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &size); // Number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Rank of current process
 
-    // Initialize constant
-    const int N = size * n; // Total number of iterations
-
-    int local_X = (int *)malloc(n * sizeof(int)); // Local output vector
+    // Initialize
+    const int N = size * n;                            // Total number of iterations
+    const int x0[] = {900, 900, 30, 330, 50, 270, 20}; // Initial state vector
+    int *local_X = (int *)malloc(n * sizeof(int));     // Local output vector
 
     // Start timer
     double time = MPI_Wtime();
@@ -57,11 +60,12 @@ int main(int argc, char *argv[])
     // Run experiments n times on each process
     for (int i = 0; i < n; i++)
     {
-        local_X[i] = gillespieSSA();
+        local_X[i] = gillespieSSA(x0);
     }
 
     // Find max and min element in local output vector
-    int local_max, local_min;
+    int local_max = INT_MIN;
+    int local_min = INT_MAX;
     for (int i = 0; i < n; i++)
     {
         if (local_X[i] > local_max)
@@ -84,7 +88,7 @@ int main(int argc, char *argv[])
 
     // Create 20 histogram bins
     int *bins = (int *)malloc(20 * sizeof(int));
-    int bin_size = (global_max - global_min) / 20;
+    double bin_size = (global_max - global_min) / 20.0;
     for (int i = 0; i < 20; i++)
     {
         bins[i] = global_min + i * bin_size;
@@ -101,14 +105,15 @@ int main(int argc, char *argv[])
                 local_bin_counts[j]++;
             }
         }
+        if (local_X[i] == global_max)
+        {
+            local_bin_counts[19]++;
+        }
     }
 
     // Find global bin counts
-    if (rank == 0)
-    {
-        int *global_bin_counts = (int *)calloc(20, sizeof(int));
-        MPI_Reduce(local_bin_counts, global_bin_counts, 20, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    }
+    int *global_bin_counts = (int *)calloc(20, sizeof(int));
+    MPI_Reduce(local_bin_counts, global_bin_counts, 20, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     // Stop timer
     time = MPI_Wtime() - time;
@@ -126,8 +131,10 @@ int main(int argc, char *argv[])
     {
         FILE *fp;
         fp = fopen(filename, "w");
-        fprintf(fp, "Number of iterations: %d\n", N);
-        fprintf(fp, "Max time: %fs\n \n", max_time);
+        fprintf(fp, "Nr iters: \t %d\n", N);
+        fprintf(fp, "Max time: \t %.4f \n", max_time);
+        fprintf(fp, "Min: \t\t %d\n \n", global_min);
+        fprintf(fp, "Max: \t\t %d\n", global_max);
         fprintf(fp, "Bin \t\t Count\n");
         fprintf(fp, "------------------\n");
         for (int i = 0; i < 19; i++)
@@ -158,68 +165,6 @@ double randdouble(double min, double max)
     return min + r * (max - min);
 }
 
-// State change matrix (15x7)
-void update_state(int *x, int reaction)
-{
-    switch (reaction)
-    {
-    case 0:
-        x[0] += 1;
-        break;
-    case 1:
-        x[0] -= 1;
-        break;
-    case 2:
-        x[0] -= 1;
-        x[2] += 1;
-        break;
-    case 3:
-        x[1] += 1;
-        break;
-    case 4:
-        x[1] -= 1;
-        break;
-    case 5:
-        x[1] -= 1;
-        x[3] += 1;
-        break;
-    case 6:
-        x[2] -= 1;
-        break;
-    case 7:
-        x[2] -= 1;
-        x[4] += 1;
-        break;
-    case 8:
-        x[3] -= 1;
-        break;
-    case 9:
-        x[3] -= 1;
-        x[5] += 1;
-        break;
-    case 10:
-        x[4] -= 1;
-        break;
-    case 11:
-        x[4] -= 1;
-        x[6] += 1;
-        break;
-    case 12:
-        x[5] -= 1;
-        break;
-    case 13:
-        x[0] += 1;
-        x[6] -= 1;
-        break;
-    case 14:
-        x[6] -= 1;
-        break;
-    default:
-        perror("Invalid reaction index");
-        break;
-    }
-}
-
 int select_reaction(double *q, double a0, int length)
 {
     // Generate random double between 0 and 1
@@ -234,16 +179,19 @@ int select_reaction(double *q, double a0, int length)
 
     return i;
 }
-
-int gillespieSSA()
+// input initial state
+int gillespieSSA(int *x0)
 {
     double t = 0.0;  // Time
     double tau;      // Time step
     double a0 = 0.0; // Total propensity
     int reaction;    // Reaction index
 
-    int *x = (int *)malloc(Q * sizeof(int));          // State vector
-    x = [ 900, 900, 30, 330, 50, 270, 20 ];           // Initial state
+    int *x = (int *)malloc(Q * sizeof(int)); // State vector
+    for (int i = 0; i < Q; i++)              // Initialize state vector
+    {
+        x[i] = x0[i];
+    }
     double *w = (double *)malloc(R * sizeof(double)); // Propensity vector
     double *q = (double *)malloc(R * sizeof(double)); // Cumulative propensity vector
 
@@ -261,7 +209,7 @@ int gillespieSSA()
         }
 
         // Calculate time step
-        tau = (1 / a0) * log(1 / randdouble(0, 1));
+        tau = -log(randdouble(0, 1)) / a0;
 
         // Calculate cumulative propensities
         q[0] = w[0];
@@ -280,5 +228,5 @@ int gillespieSSA()
         t += tau;
     }
 
-    return x[0]
+    return x[0];
 }
