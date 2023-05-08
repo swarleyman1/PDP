@@ -10,7 +10,7 @@ Written by Jacob Malmenstedt in 2023.
 
 The code takes two input parameters:
 
-- `n`: the number of simulations to run in each process
+- `n`: the number of simulations to run in total
 - `output file`: The file to which the results should be written to
 
 ## Propensity Function
