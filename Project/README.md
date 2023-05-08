@@ -22,6 +22,6 @@ The propensity function used in this implementation is set up to simulate a mala
 To run the code, run the following command:
 
 ```bash
-mpirun -np <number of processes> ./ssa <number of simulations> <output file>
+mpirun -np <number of processes> ./mc <number of simulations> <output file>
 ```
 
