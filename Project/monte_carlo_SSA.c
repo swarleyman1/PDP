@@ -17,7 +17,10 @@
  ****************************************************************************/
 
 // Upgrades to be implemented:
-/*
+// Use openMP to parallelize the execution of the experiments on each process.
+
+
+/* For higher grades:
 All processes work fully in parallel, however, as the time steps are chosen randomly, the processes
 proceed to reach the final time asynchronously. 
 Record the wall clock time after passing time 25,50,75,100 (per process)
@@ -25,7 +28,7 @@ so that at the end you can output the average time per processor for
 each time sub-interval. You are encouraged to use the MPI one-sided put/get functionality.*/
 
 // Constants
-#define OUTPUT 0    // Flag for output to file or not
+#define OUTPUT 1    // Flag for output to file or not
 #define R 15        // Number of reactions
 #define Q 7         // Number of quantities
 #define T 100       // Maximum time
@@ -34,35 +37,48 @@ each time sub-interval. You are encouraged to use the MPI one-sided put/get func
 void prop(int *x, double *w);
 static inline double rand_zero_to_one();
 static inline int select_reaction(double *q, double a0, int length);
-static int gillespieSSA(const int *x0);
+static int gillespieSSA(int *x, double *w, double *q, const int *x0);
 
 // Main function
 int main(int argc, char *argv[])
 {
 
     // Check if correct number of arguments
+    #if OUTPUT
     if (argc != 3)
     {
         printf("Usage: %s <number of iterations> <output file>\n", argv[0]);
         return 1;
     }
+    #else
+    if (argc != 2)
+    {
+        printf("Usage: %s <number of iterations>\n", argv[0]);
+        return 1;
+    }
+    #endif
 
     // Read command line arguments
     int N = atoi(argv[1]);    // Number of iterations
+    #if OUTPUT
     char *filename = argv[2]; // Output file name
-
+    #endif
+    
     // Initialize MPI
     int size, rank;
     MPI_Init(&argc, &argv);
     //MPI_Status status;
     //MPI_Request send_request, recv_request;
-    MPI_Comm_size(MPI_COMM_WORLD, &size); // Number of processes
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Rank of current process
+    MPI_Comm_size(MPI_COMM_WORLD, &size);   // Number of processes
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);   // Rank of current process
 
     // Initialize
-    const int n = N / size;                            // Number of iterations per process
-    const int x0[] = {900, 900, 30, 330, 50, 270, 20}; // Initial state vector
-    int *local_X = (int *)malloc(n * sizeof(int));     // Local output vector
+    const int n = N / size;                             // Number of iterations per process
+    const int x0[] = {900, 900, 30, 330, 50, 270, 20};  // Initial state vector
+    int *local_X = (int *)malloc(n * sizeof(int));      // Local output vector
+    int *x = (int *)malloc(Q * sizeof(int));            // State vector
+    double *w = (double *)malloc(R * sizeof(double));   // Propensity vector
+    double *q = (double *)malloc(R * sizeof(double));   // Cumulative propensity vector
 
     // Initialize random number generator
     srand(time(NULL) + rank);
@@ -70,11 +86,15 @@ int main(int argc, char *argv[])
     // Start timer
     double time = MPI_Wtime();
 
+
+
     // Run experiments n times on each process
     for (int i = 0; i < n; i++)
     {
-        local_X[i] = gillespieSSA(x0);
+        local_X[i] = gillespieSSA(x, w, q, x0);
     }
+
+
 
     // Find max and min element in local output vector
     int local_max = INT_MIN;
@@ -144,8 +164,8 @@ int main(int argc, char *argv[])
         fp = fopen(filename, "w");
         fprintf(fp, "Nr iters: \t %d\n", N);
         fprintf(fp, "Max time: \t %.4f \n", max_time);
-        fprintf(fp, "Min: \t\t %d\n \n", global_min);
-        fprintf(fp, "Max: \t\t %d\n", global_max);
+        fprintf(fp, "Min: \t\t %d\n", global_min);
+        fprintf(fp, "Max: \t\t %d\n \n", global_max);
         fprintf(fp, "Bin \t\t Count\n");
         fprintf(fp, "------------------\n");
         for (int i = 0; i < 19; i++)
@@ -162,6 +182,9 @@ int main(int argc, char *argv[])
     free(bins);
     free(local_bin_counts);
     free(global_bin_counts);
+    free(x);
+    free(w);
+    free(q);
 
     // Finalize the MPI environment.
     MPI_Finalize();
@@ -191,17 +214,15 @@ static inline int select_reaction(double *q, double a0, int length)
     return i;
 }
 
-static int gillespieSSA(const int *x0)
+static int gillespieSSA(int *x, double *w, double *q, const int *x0)
 {
     double t = 0.0;  // Time
     double tau;      // Time step
-    double a0 = 0.0; // Total propensity
+    double a0;       // Total propensity
     int reaction;    // Reaction index
 
-    int *x = (int *)malloc(Q * sizeof(int));    // State vector
     memcpy(x, x0, Q * sizeof(int));             // Copy initial state to state vector
-    double *w = (double *)malloc(R * sizeof(double)); // Propensity vector
-    double *q = (double *)malloc(R * sizeof(double)); // Cumulative propensity vector
+
 
     // Main loop
     while (t < T)
@@ -209,22 +230,18 @@ static int gillespieSSA(const int *x0)
         // Calculate propensities
         prop(x, w);
 
-        // Calculate total propensity
-        a0 = 0.0;
-        for (int i = 0; i < R; i++)
-        {
-            a0 += w[i];
-        }
-
-        // Calculate time step
-        tau = -log(rand_zero_to_one()) / a0;
-
         // Calculate cumulative propensities
         q[0] = w[0];
         for (int i = 1; i < R; i++)
         {
             q[i] = q[i - 1] + w[i];
         }
+
+        // Calculate total propensity
+        a0 = q[R - 1];
+
+        // Calculate time step
+        tau = -log(rand_zero_to_one()) / a0;
 
         // Select reaction
         reaction = select_reaction(q, a0, R);
@@ -236,14 +253,5 @@ static int gillespieSSA(const int *x0)
         t += tau;
     }
 
-    // Return number of susceptible humans
-    int result = x[0];
-
-    // Free memory
-    free(x);
-    free(w);
-    free(q);
-
-
-    return result;
+    return x[0];
 }
