@@ -16,16 +16,7 @@
  *                                                                          *
  ****************************************************************************/
 
-// Upgrades to be implemented:
-// Use openMP to parallelize the execution of the experiments on each process.
 
-
-/* For higher grades:
-All processes work fully in parallel, however, as the time steps are chosen randomly, the processes
-proceed to reach the final time asynchronously. 
-Record the wall clock time after passing time 25,50,75,100 (per process)
-so that at the end you can output the average time per processor for
-each time sub-interval. You are encouraged to use the MPI one-sided put/get functionality.*/
 
 // Constants
 #define OUTPUT 2    // Flag for output: 0 = no output, 1 = human readable, 2 = csv
@@ -37,7 +28,7 @@ each time sub-interval. You are encouraged to use the MPI one-sided put/get func
 void prop(int *x, double *w);
 static inline double rand_zero_to_one();
 static inline int select_reaction(double *q, double a0, int length);
-static int gillespieSSA(int *x, double *w, double *q, const int *x0);
+static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *checkpoints, const int rank, const int size, MPI_Win win);
 
 // Main function
 int main(int argc, char *argv[])
@@ -59,7 +50,7 @@ int main(int argc, char *argv[])
     #endif
 
     // Read command line arguments
-    int N = atoi(argv[1]);    // Number of iterations
+    int n = atoi(argv[1]);    // Number of iterations per process
     #if OUTPUT > 0
     char *filename = argv[2]; // Output file name
     #endif
@@ -73,13 +64,22 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);   // Rank of current process
 
     // Initialize
-    const int n = N / size;                             // Number of iterations per process
-    const int x0[] = {900, 900, 30, 330, 50, 270, 20};  // Initial state vector
+    const int N = n * size;                                 // Number of iterations in total
+    int checkpoints[4] = {25, 50, 75, 100};                 // Checkpoints when to record runtimes
+    int num_checkpoints = sizeof(checkpoints) / sizeof(int);// Number of times to record
+    double runtimes[num_checkpoints * size];                // Array to store runtimes
+    const int x0[] = {900, 900, 30, 330, 50, 270, 20};      // Initial state vector
     int local_X[n];     // Local output vector
     int x[Q];           // State vector
     double w[R];        // Propensity vector
     double q[R];        // Cumulative propensity vector
 
+    // Create window for one-sided communication
+    MPI_Win win;
+    MPI_Win_create(&runtimes, num_checkpoints * size * sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
+
+    // Create epoch for one-sided communication
+    MPI_Win_fence(0, win);
 
     // Initialize random number generator
     srand(time(NULL) + rank);
@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
     // Run experiments n times on each process
     for (int i = 0; i < n; i++)
     {
-        local_X[i] = gillespieSSA(x, w, q, x0);
+        local_X[i] = gillespieSSA(x, w, q, x0, checkpoints, rank, size, win);
     }
 
 
@@ -155,9 +155,27 @@ int main(int argc, char *argv[])
     MPI_Reduce(&time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
+    // Print time statistics
     if (rank == 0)
-    {
-        printf("max: %.4f, min: %.4f, avg: %.4f\n", max_time, min_time, avg_time / size);
+    {   
+        printf("total time for %d iterations:\n", N);
+        printf("max: %.4f, min: %.4f, avg: %.4f\n\n", max_time, min_time, avg_time / size);
+        printf(" RANK\t");
+        for(int i = 0; i < size; i++)
+        {
+            printf("\t%d", i);
+        }
+        printf("\n");
+        for(int i = 0; i < num_checkpoints; i++)
+        {
+            printf("Checkpoint %d", checkpoints[i]);
+            for(int j = 0; j < size; j++)
+            {
+                printf("\t%.4f", runtimes[i * size + j]/size);
+            }
+            printf("\n");
+        
+        }
     }
 
     // Write to file
@@ -197,6 +215,8 @@ int main(int argc, char *argv[])
     }
     #endif
 
+    // Free window
+    MPI_Win_free(&win);
 
     // Finalize the MPI environment.
     MPI_Finalize();
@@ -226,10 +246,12 @@ static inline int select_reaction(double *q, double a0, int length)
     return i;
 }
 
-static int gillespieSSA(int *x, double *w, double *q, const int *x0)
+static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *checkpoints, const int rank, const int size, MPI_Win win)
 {
     double t = 0.0;  // Time
     double tau;      // Time step
+    int t_index = 0; // Time index
+    double wtime = MPI_Wtime();    // Wall time
     double a0;       // Total propensity
     int reaction;    // Reaction index
 
@@ -239,6 +261,14 @@ static int gillespieSSA(int *x, double *w, double *q, const int *x0)
     // Main loop
     while (t < T)
     {
+        // Check if time is larger than next checkpoint
+        if (t > checkpoints[t_index])
+        {
+            // Write runtime to window
+            wtime = MPI_Wtime()-wtime;
+            MPI_Accumulate(&wtime, 1, MPI_DOUBLE, 0, (t_index*size)+rank, 1, MPI_DOUBLE, MPI_SUM, win);
+            t_index++;
+        }
         // Calculate propensities
         prop(x, w);
 
@@ -264,6 +294,10 @@ static int gillespieSSA(int *x, double *w, double *q, const int *x0)
         // Update time
         t += tau;
     }
+
+    // Write final runtime to window
+    wtime = MPI_Wtime()-wtime;
+    MPI_Accumulate(&wtime, 1, MPI_DOUBLE, 0, (t_index*size)+rank, 1, MPI_DOUBLE, MPI_SUM, win);
 
     return x[0];
 }
