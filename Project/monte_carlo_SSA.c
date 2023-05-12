@@ -28,7 +28,7 @@ so that at the end you can output the average time per processor for
 each time sub-interval. You are encouraged to use the MPI one-sided put/get functionality.*/
 
 // Constants
-#define OUTPUT 1    // Flag for output to file or not
+#define OUTPUT 2    // Flag for output: 0 = no output, 1 = human readable, 2 = csv
 #define R 15        // Number of reactions
 #define Q 7         // Number of quantities
 #define T 100       // Maximum time
@@ -44,14 +44,14 @@ int main(int argc, char *argv[])
 {
 
     // Check if correct number of arguments
-    #if OUTPUT
+    #if OUTPUT > 0
     if (argc != 3)
     {
         printf("Usage: %s <number of iterations> <output file>\n", argv[0]);
         return 1;
     }
     #else
-    if (argc != 2)
+    if (argc < 2)
     {
         printf("Usage: %s <number of iterations>\n", argv[0]);
         return 1;
@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 
     // Read command line arguments
     int N = atoi(argv[1]);    // Number of iterations
-    #if OUTPUT
+    #if OUTPUT > 0
     char *filename = argv[2]; // Output file name
     #endif
     
@@ -75,10 +75,11 @@ int main(int argc, char *argv[])
     // Initialize
     const int n = N / size;                             // Number of iterations per process
     const int x0[] = {900, 900, 30, 330, 50, 270, 20};  // Initial state vector
-    int *local_X = (int *)malloc(n * sizeof(int));      // Local output vector
-    int *x = (int *)malloc(Q * sizeof(int));            // State vector
-    double *w = (double *)malloc(R * sizeof(double));   // Propensity vector
-    double *q = (double *)malloc(R * sizeof(double));   // Cumulative propensity vector
+    int local_X[n];     // Local output vector
+    int x[Q];           // State vector
+    double w[R];        // Propensity vector
+    double q[R];        // Cumulative propensity vector
+
 
     // Initialize random number generator
     srand(time(NULL) + rank);
@@ -117,7 +118,7 @@ int main(int argc, char *argv[])
     MPI_Allreduce(&local_min, &global_min, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
 
     // Create 20 histogram bins
-    int *bins = (int *)malloc(20 * sizeof(int));
+    int bins[20];
     double bin_size = (global_max - global_min) / 20.0;
     for (int i = 0; i < 20; i++)
     {
@@ -125,7 +126,7 @@ int main(int argc, char *argv[])
     }
 
     // Count number of elements in each bin
-    int *local_bin_counts = (int *)calloc(20, sizeof(int));
+    int local_bin_counts[20];
     for (int i = 0; i < n; i++)
     {
         for (int j = 0; j < 20; j++)
@@ -142,28 +143,34 @@ int main(int argc, char *argv[])
     }
 
     // Find global bin counts
-    int *global_bin_counts = (int *)calloc(20, sizeof(int));
+    int global_bin_counts[20];
     MPI_Reduce(local_bin_counts, global_bin_counts, 20, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     // Stop timer
     time = MPI_Wtime() - time;
 
     // Print max time
-    double max_time;
+    double avg_time, max_time, min_time;
+    MPI_Reduce(&time, &avg_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
     if (rank == 0)
     {
-        printf("%f\n", max_time);
+        printf("max: %.4f, min: %.4f, avg: %.4f\n", max_time, min_time, avg_time / size);
     }
 
     // Write to file
-    #if OUTPUT
+    #if OUTPUT == 1 // Human readable output
     if (rank == 0)
     {
         FILE *fp;
         fp = fopen(filename, "w");
         fprintf(fp, "Nr iters: \t %d\n", N);
+        fprintf(fp, "Nr procs: \t %d\n", size);
+        fprintf(fp, "Avg time: \t %.4f \n", avg_time / size);
         fprintf(fp, "Max time: \t %.4f \n", max_time);
+        fprintf(fp, "Min time: \t %.4f \n", min_time);
         fprintf(fp, "Min: \t\t %d\n", global_min);
         fprintf(fp, "Max: \t\t %d\n \n", global_max);
         fprintf(fp, "Bin \t\t Count\n");
@@ -175,16 +182,21 @@ int main(int argc, char *argv[])
         fprintf(fp, "%d - %d \t %d\n", bins[19], global_max, global_bin_counts[19]);
         fclose(fp);
     }
+    #elif OUTPUT == 2 // CSV output
+    if (rank == 0)
+    {
+        FILE *fp;
+        fp = fopen(filename, "w");
+        fprintf(fp, "%d, %d, %.4f, %.4f, %.4f, %d, %d\n", N, size, avg_time / size, max_time, min_time, global_min, global_max);
+        for (int i = 0; i < 19; i++)
+        {
+            fprintf(fp, "%d, %d, %d\n", bins[i], bins[i + 1], global_bin_counts[i]);
+        }
+        fprintf(fp, "%d, %d, %d\n", bins[19], global_max, global_bin_counts[19]);
+        fclose(fp);
+    }
     #endif
 
-    // Free memory
-    free(local_X);
-    free(bins);
-    free(local_bin_counts);
-    free(global_bin_counts);
-    free(x);
-    free(w);
-    free(q);
 
     // Finalize the MPI environment.
     MPI_Finalize();
