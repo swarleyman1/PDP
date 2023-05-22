@@ -3,7 +3,7 @@
 #SBATCH -M snowy
 #SBATCH -A uppmax2023-2-13
 #SBATCH -p core -n 16
-#SBATCH -t 20:00
+#SBATCH -t 3:00:00
 #SBATCH -J mc
 
 ################################################################################
@@ -16,13 +16,16 @@
 # scalability.
 ################################################################################
 
-num_proc=(1 2 4 8 16)
-num_sim=(1000000 2000000 4000000 8000000 16000000)
+
+num_proc=(4 8 16)
+num_sim=(1000000 2000000 4000000 8000000)
 output_file="output_to_remove.txt"
 
-for proc in ${num_proc[@]}; do
-    for sim in ${num_sim[@]}; do
-        echo "Running with $proc processes and $sim simulations"
-        mpirun --bind-to none -np $proc ./mc $sim $output_file
+for proc in "${num_proc[@]}"; do
+    for sim in "${num_sim[@]}"; do
+        sim_per_proc=$((sim / proc))  # Calculate number of simulations per process
+        echo "Running with $proc processes and $sim_per_proc simulations per process"
+        echo "In total $sim simulations"
+        mpirun --bind-to none -np "$proc" ./mc "$sim_per_proc" "$output_file"
     done
 done

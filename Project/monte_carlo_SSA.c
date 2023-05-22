@@ -91,13 +91,15 @@ int main(int argc, char *argv[])
     MPI_Win_fence(0, win);
 
     // Start timer
-    double time = MPI_Wtime();
+    double start_time = MPI_Wtime();
 
     // Run experiments n times on each process
     for (int i = 0; i < n; i++)
     {
         local_X[i] = gillespieSSA(x, w, q, x0, checkpoints, rank, size, win);
     }
+
+    double mid_time = MPI_Wtime();
 
     // Find max and min element in local output vector
     int local_max = INT_MIN;
@@ -149,31 +151,42 @@ int main(int argc, char *argv[])
     MPI_Reduce(local_bin_counts, global_bin_counts, 20, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     // Stop timer
-    time = MPI_Wtime() - time;
+    double end_time = MPI_Wtime();
 
-    // Print max time
+    // Calculate runtimes
+    double tot_time = end_time - start_time;
+    double comm_time = end_time - mid_time;
+
+    // Reduce runtimes
     double avg_time, max_time, min_time;
-    MPI_Reduce(&time, &avg_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    double avg_comm_time, max_comm_time, min_comm_time;
+    MPI_Reduce(&tot_time, &avg_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&tot_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&tot_time, &min_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    MPI_Reduce(&comm_time, &avg_comm_time, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&comm_time, &max_comm_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&comm_time, &min_comm_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
     // Print time statistics
     if (rank == 0)
     {
         printf("total time for %d iterations:\n", N);
         printf("max: %.4f, min: %.4f, avg: %.4f\n\n", max_time, min_time, avg_time / size);
-        printf("RANK\t");
+        printf("communication time for %d iterations:\n", N);
+        printf("max: %.4f, min: %.4f, avg: %.4f\n\n", max_comm_time, min_comm_time, avg_comm_time / size);
+        printf("RANK\t\t");
         for (int i = 0; i < size; i++)
         {
-            printf("\t%d", i);
+            printf("%d         ", i);
         }
         printf("\n");
         for (int i = 0; i < num_checkpoints; i++)
         {
-            printf("Checkpoint %d", checkpoints[i]);
+            printf("Checkpoint %d\t", checkpoints[i]);
             for (int j = 0; j < size; j++)
             {
-                printf("\t%.4f", runtimes[i * size + j] / size);
+                printf("%.4fms  ", runtimes[i * size + j] * 1000 / N);
             }
             printf("\n");
         }
