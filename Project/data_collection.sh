@@ -3,7 +3,7 @@
 #SBATCH -M snowy
 #SBATCH -A uppmax2023-2-13
 #SBATCH -p core -n 16
-#SBATCH -t 2:00:00
+#SBATCH -t 1:00:00
 #SBATCH -J mc
 
 echo "Running with 16 processes and 1000000 simulations"

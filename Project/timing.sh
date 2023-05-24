@@ -18,7 +18,7 @@
 
 
 num_proc=(4 8 16)
-num_sim=(1000000 2000000 4000000 8000000)
+num_sim=(100000 200000 400000 800000)
 output_file="output_to_remove.txt"
 
 for proc in "${num_proc[@]}"; do
