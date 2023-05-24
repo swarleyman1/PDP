@@ -28,7 +28,7 @@
 void prop(int *x, double *w);
 static inline double rand_zero_to_one();
 static inline int select_reaction(double *q, double a0, int length);
-static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *checkpoints, const int rank, const int size, MPI_Win win);
+static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *checkpoints, const int rank, const int size, double *timings);
 
 // Main function
 int main(int argc, char *argv[])
@@ -58,8 +58,6 @@ int main(int argc, char *argv[])
     // Initialize MPI
     int size, rank;
     MPI_Init(&argc, &argv);
-    // MPI_Status status;
-    // MPI_Request send_request, recv_request;
     MPI_Comm_size(MPI_COMM_WORLD, &size); // Number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Rank of current process
 
@@ -68,6 +66,7 @@ int main(int argc, char *argv[])
     int checkpoints[4] = {25, 50, 75, 100};                  // Checkpoints when to record runtimes
     int num_checkpoints = sizeof(checkpoints) / sizeof(int); // Number of times to record
     double runtimes[num_checkpoints * size];                 // Array to store runtimes
+    double local_runtimes[num_checkpoints];                  // Array to store local runtimes
     const int x0[] = {900, 900, 30, 330, 50, 270, 20};       // Initial state vector
     int local_X[n];                                          // Local output vector
     int x[Q];                                                // State vector
@@ -80,15 +79,14 @@ int main(int argc, char *argv[])
         runtimes[i] = 0.0;
     }
 
-    // Create window for one-sided communication
-    MPI_Win win;
-    MPI_Win_create(&runtimes, num_checkpoints * size * sizeof(double), sizeof(double), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
+    // Initialize local runtimes array
+    for (int i = 0; i < num_checkpoints; i++)
+    {
+        local_runtimes[i] = 0.0;
+    }
 
     // Initialize random number generator
     srand(time(NULL) + rank);
-
-    // Synchronize all processes
-    MPI_Win_fence(0, win);
 
     // Start timer
     double start_time = MPI_Wtime();
@@ -96,7 +94,7 @@ int main(int argc, char *argv[])
     // Run experiments n times on each process
     for (int i = 0; i < n; i++)
     {
-        local_X[i] = gillespieSSA(x, w, q, x0, checkpoints, rank, size, win);
+        local_X[i] = gillespieSSA(x, w, q, x0, checkpoints, rank, size, local_runtimes);
     }
 
     double mid_time = MPI_Wtime();
@@ -168,6 +166,9 @@ int main(int argc, char *argv[])
     MPI_Reduce(&comm_time, &max_comm_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&comm_time, &min_comm_time, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
+    // Gather checkpoint timings
+    MPI_Gather(local_runtimes, num_checkpoints, MPI_DOUBLE, runtimes, num_checkpoints, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
     // Print time statistics
     if (rank == 0)
     {
@@ -186,7 +187,7 @@ int main(int argc, char *argv[])
             printf("Checkpoint %d\t", checkpoints[i]);
             for (int j = 0; j < size; j++)
             {
-                printf("%.4fms  ", runtimes[i * size + j] * 1000 / N);
+                printf("%.4fms  ", runtimes[j * num_checkpoints + i] * 1000/ N);
             }
             printf("\n");
         }
@@ -229,9 +230,6 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // Free window
-    MPI_Win_free(&win);
-
     // Finalize the MPI environment.
     MPI_Finalize();
 
@@ -260,7 +258,7 @@ static inline int select_reaction(double *q, double a0, int length)
     return i;
 }
 
-static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *checkpoints, const int rank, const int size, MPI_Win win)
+static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *checkpoints, const int rank, const int size, double *timings)
 {
     // Initialize
     double t = 0.0;              // Time
@@ -279,9 +277,9 @@ static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *
         // Check if time is larger than next checkpoint
         if (t > checkpoints[t_index])
         {
-            // Write runtime to window
+            // Write runtime to array
             wtime = MPI_Wtime() - wtime0;
-            MPI_Accumulate(&wtime, 1, MPI_DOUBLE, 0, (t_index * size) + rank, 1, MPI_DOUBLE, MPI_SUM, win);
+            timings[t_index] += wtime;
             t_index++;
         }
         // Calculate propensities
@@ -310,9 +308,9 @@ static int gillespieSSA(int *x, double *w, double *q, const int *x0, const int *
         t += tau;
     }
 
-    // Write final runtime to window
+    // Write final runtime to array
     wtime = MPI_Wtime() - wtime0;
-    MPI_Accumulate(&wtime, 1, MPI_DOUBLE, 0, (t_index * size) + rank, 1, MPI_DOUBLE, MPI_SUM, win);
+    timings[t_index] += wtime;
 
     return x[0];
 }
