@@ -62,28 +62,20 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Rank of current process
 
     // Initialize
-    const int N = n * size;                                  // Number of iterations in total
-    int checkpoints[4] = {25, 50, 75, 100};                  // Checkpoints when to record runtimes
-    int num_checkpoints = sizeof(checkpoints) / sizeof(int); // Number of times to record
-    double runtimes[num_checkpoints * size];                 // Array to store runtimes
-    double local_runtimes[num_checkpoints];                  // Array to store local runtimes
-    const int x0[] = {900, 900, 30, 330, 50, 270, 20};       // Initial state vector
-    int local_X[n];                                          // Local output vector
-    int x[Q];                                                // State vector
-    double w[R];                                             // Propensity vector
-    double q[R];                                             // Cumulative propensity vector
+    const int N = n * size;                                                      // Number of iterations in total
+    const int checkpoints[4] = {25, 50, 75, 100};                                // Checkpoints when to record runtimes
+    const size_t num_checkpoints = sizeof(checkpoints) / sizeof(checkpoints[0]); // Number of times to record
+    double runtimes[num_checkpoints * size];                                     // Array to store runtimes
+    double local_runtimes[num_checkpoints];                                      // Array to store local runtimes
+    const int x0[] = {900, 900, 30, 330, 50, 270, 20};                           // Initial state vector
+    int local_X[n];                                                              // Local output vector
+    int x[Q];                                                                    // State vector
+    double w[R];                                                                 // Propensity vector
+    double q[R];                                                                 // Cumulative propensity vector
 
-    // Initialize runtimes array
-    for (int i = 0; i < num_checkpoints * size; i++)
-    {
-        runtimes[i] = 0.0;
-    }
-
-    // Initialize local runtimes array
-    for (int i = 0; i < num_checkpoints; i++)
-    {
-        local_runtimes[i] = 0.0;
-    }
+    // Initialize arrays with 0.0
+    memset(runtimes, 0.0, sizeof(runtimes));
+    memset(local_runtimes, 0.0, sizeof(local_runtimes));
 
     // Initialize random number generator
     srand(time(NULL) + rank);
@@ -121,7 +113,7 @@ int main(int argc, char *argv[])
 
     // Create 20 histogram bins
     int bins[20];
-    double bin_size = (global_max - global_min) / 20.0;
+    const double bin_size = (global_max - global_min) / 20.0;
     for (int i = 0; i < 20; i++)
     {
         bins[i] = global_min + i * bin_size;
@@ -152,8 +144,8 @@ int main(int argc, char *argv[])
     double end_time = MPI_Wtime();
 
     // Calculate runtimes
-    double tot_time = end_time - start_time;
-    double comm_time = end_time - mid_time;
+    const double tot_time = end_time - start_time;
+    const double comm_time = end_time - mid_time;
 
     // Reduce runtimes
     double avg_time, max_time, min_time;
@@ -187,7 +179,7 @@ int main(int argc, char *argv[])
             printf("Checkpoint %d\t", checkpoints[i]);
             for (int j = 0; j < size; j++)
             {
-                printf("%.4fms  ", runtimes[j * num_checkpoints + i] * 1000/ N);
+                printf("%.4fms  ", runtimes[j * num_checkpoints + i] * 1000 / N);
             }
             printf("\n");
         }
