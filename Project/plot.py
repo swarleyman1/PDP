@@ -2,12 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-# Code that plots a histogram of the data in the file data.csv
+# Code that plots a histogram of the data in the file specified
 
-
-
-
-p= Path(__file__).with_name('data.csv')
+filename = input('Enter the name of the file to plot: ')
+p= Path(__file__).with_name(filename)
 data = np.genfromtxt(p, delimiter=',', skip_header=1, names=['lb', 'ub', 'count'])
 
 # Plot the data in a bar chart
